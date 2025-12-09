@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Invoice Extractor</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <div class="logo">IX</div>
+        <div class="title">
+          <h1>Invoice Intelligence</h1>
+          <span>Upload · Extract · Preview · Export</span>
+        </div>
+      </div>
+      <div class="chip">Realtime OCR + CSV/XLSX</div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <h2>Upload & Controls</h2>
+        <p class="muted">Drop receipts or invoices (PDF/image/text). Add custom fields and categories before processing.</p>
+
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp,.gif,.txt,.csv,.xlsx,.xls" hidden />
+          <div class="drop-inner">
+            <div class="drop-icon">⇪</div>
+            <div>
+              <div><strong>Drag & drop</strong> files here or</div>
+              <div class="muted">Supports PDF, images, text. Batch uploads welcome.</div>
+            </div>
+            <button class="btn btn-primary btn-icon" id="browseBtn" type="button">Browse</button>
+          </div>
+        </div>
+
+        <div class="file-list" id="fileList">
+          <div class="muted small">No files yet.</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="stack">
+          <div class="field-group">
+            <div class="preview-head">
+              <label>Custom fields (applied to every document)</label>
+              <button class="btn btn-ghost btn-icon" id="addCustomField" type="button">+ Add field</button>
+            </div>
+            <div id="customFields"></div>
+          </div>
+
+          <div class="field-group">
+            <div class="preview-head">
+              <label>Vendor → Category mapping</label>
+              <button class="btn btn-ghost btn-icon" id="addCategory" type="button">+ Add rule</button>
+            </div>
+            <div id="categoryFields"></div>
+            <div class="small">Example: Starbucks → Meals, Uber → Travel</div>
+          </div>
+
+          <div class="toggles">
+            <label class="toggle">
+              <input type="checkbox" id="forceOcr" />
+              <span>Force OCR (images or tricky PDFs)</span>
+            </label>
+            <label class="toggle">
+              <span>Max pages</span>
+              <input type="number" id="maxPages" min="1" max="10" value="5" />
+            </label>
+          </div>
+
+          <button class="btn btn-primary btn-icon" id="processBtn" type="button">Run extraction</button>
+          <div class="small muted">We always show a preview before downloads; CSV/XLSX generate after processing.</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="preview-head">
+          <div>
+            <h2>Preview & Export</h2>
+            <div class="small muted">Verify parsed data, line items, and warnings. Exports are aggregated.</div>
+          </div>
+          <div class="status" id="status" data-tone="info">Ready</div>
+        </div>
+
+        <div class="downloads">
+          <a href="#" id="csvLink" aria-disabled="true">Download CSV</a>
+          <a href="#" id="xlsxLink" aria-disabled="true">Download XLSX</a>
+        </div>
+
+        <div class="divider"></div>
+
+        <div id="summary"></div>
+
+        <div class="divider"></div>
+
+        <div class="preview-head" style="margin-bottom: 6px;">
+          <div class="record-select">
+            <span class="badge">Line items</span>
+            <select id="recordSelect"></select>
+          </div>
+        </div>
+        <div class="table-wrap" id="itemsTable"></div>
+
+        <div class="divider"></div>
+
+        <div>
+          <div class="preview-head">
+            <span class="badge">Flattened export rows</span>
+            <span class="small muted">Matches CSV/XLSX exactly.</span>
+          </div>
+          <div class="table-wrap" id="rowsTable"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div>
+          <div class="preview-head">
+            <span class="badge">Warnings & Ambiguity</span>
+          </div>
+          <div class="warning-list" id="warnings"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

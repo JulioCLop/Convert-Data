@@ -1,0 +1,14 @@
+Starbucks Coffee
+123 Main Street
+Seattle, WA
+Invoice # 45678
+Date: 11/28/2024 10:35 AM
+
+Item Qty Price Total
+Latte 2 4.50 9.00
+Blueberry Muffin 1 3.25 3.25
+
+Subtotal 12.25
+Tax 1.10
+Total 13.35
+Paid with VISA **** 1234
