@@ -43,6 +43,7 @@ Features
 
 - PDF text extraction (`pdfplumber`), image OCR (`pytesseract` + `Pillow`), or raw text files.
 - Heuristic parsing for vendor, date, invoice/receipt number, totals, taxes, payment method, and line items (qty, unit, total, SKU when present).
+- Additional intelligence: basic doc-type detection (invoice vs receipt), currency/tip detection, and multi-quantity line parsing (e.g., `3 x $12.99`).
 - Multiple documents aggregated into one dataset.
 - Custom fields per run (e.g., `Project`, `Department`, `CostCenter`, `Notes`).
 - Optional vendor-to-category mapping for expense reporting.

@@ -102,7 +102,12 @@ def _extract_image(path: str) -> Tuple[str, List[str]]:
 def parse_invoice(text: str, custom_fields: Dict[str, str], vendor_categories: Dict[str, str]) -> Dict:
     lines = _normalize_lines(text)
     items, header_lines = _find_line_items(lines)
+    items = _merge_similar_items(items)
     amounts = _extract_labeled_amounts(lines)
+    item_sum = _sum_item_totals(items)
+    doc_type = _detect_doc_type(lines)
+    currency = _detect_currency(lines)
+    tip = _detect_tip(lines)
     lowered_categories = {k.lower(): v for k, v in vendor_categories.items()}
     data = {
         "vendor": _guess_vendor(header_lines or lines),
@@ -113,11 +118,21 @@ def parse_invoice(text: str, custom_fields: Dict[str, str], vendor_categories: D
         "tax": amounts.get("tax") if amounts else _find_amount(lines, labels=("tax", "vat")),
         "total": amounts.get("total") if amounts else _find_amount(lines, labels=("total", "amount due", "balance", "grand total")),
         "payment_method": _find_payment_method(lines),
+        "doc_type": doc_type,
+        "currency": currency,
+        "tip": tip,
         "category": None,
         "items": items,
         "header_lines": header_lines,
         "warnings": [],
     }
+    if not data["total"] and item_sum:
+        data["total"] = round(item_sum, 2)
+    if not data["subtotal"] and data["total"] and data["tax"] not in (None, ""):
+        try:
+            data["subtotal"] = round(float(data["total"]) - float(data["tax"]), 2)
+        except Exception:
+            pass
     if data["vendor"]:
         vendor_key = data["vendor"].lower()
         if vendor_key in lowered_categories:
@@ -152,6 +167,32 @@ def _guess_vendor(lines: List[str]) -> str:
         if 1 <= len(line.split()) <= 6:
             return line
     return lines[0] if lines else ""
+
+
+def _detect_doc_type(lines: List[str]) -> str:
+    joined = " ".join(lines).lower()
+    if "invoice" in joined:
+        return "invoice"
+    if "receipt" in joined or "pos" in joined or "sale" in joined:
+        return "receipt"
+    return ""
+
+
+def _detect_currency(lines: List[str]) -> str:
+    joined = " ".join(lines)
+    if "$" in joined:
+        return "USD"
+    if "€" in joined:
+        return "EUR"
+    if "£" in joined:
+        return "GBP"
+    match = re.search(r"\b(USD|EUR|GBP|CAD|AUD|CHF|JPY|CNY|INR|MXN)\b", joined, re.IGNORECASE)
+    return match.group(1).upper() if match else ""
+
+
+def _detect_tip(lines: List[str]) -> float:
+    tip = _find_amount(lines, labels=("tip", "gratuity", "service charge"))
+    return tip if tip is not None else None
 
 
 def _find_first_match(lines: List[str], patterns: List[str]) -> str:
@@ -268,7 +309,56 @@ def _extract_description(line: str) -> str:
     return description
 
 
+def _has_number(text: str) -> bool:
+    return bool(NUMBER_RE.search(text))
+
+
 def _parse_item_line(line: str) -> Dict:
+    # Pattern like "3 x 12.99 38.97" or "2 × $10.00 $20.00"
+    multi_match = re.search(r"(\d+(?:[.,]\d+)?)\s*[x×]\s*(\$?\(?[-+]?\d+(?:[.,]\d+)?\)?)", line, re.IGNORECASE)
+    if multi_match and NUMBER_RE.search(line):
+        qty_val = _safe_float(multi_match.group(1))
+        unit_val = _safe_float(multi_match.group(2))
+        totals = NUMBER_RE.findall(line)
+        floats = []
+        for n in totals:
+            try:
+                floats.append(_safe_float(n))
+            except ValueError:
+                continue
+        line_total = floats[-1] if floats else round(qty_val * unit_val, 2)
+        sku_match = re.search(r"\b[A-Z0-9]{5,}\b", line)
+        return {
+            "description": _extract_description(line),
+            "quantity": qty_val,
+            "unit_price": unit_val,
+            "line_total": line_total,
+            "sku": sku_match.group(0) if sku_match else "",
+        }
+
+    # First try structured columns split by multiple spaces or tabs.
+    columns = re.split(r"\s{2,}|\t+", line.strip())
+    if len(columns) >= 3 and any(_has_number(c) for c in columns[1:]):
+        desc_col = columns[0]
+        numeric_cols = [c for c in columns[1:] if _has_number(c)]
+        try:
+            total = _safe_float(numeric_cols[-1])
+            unit_price = _safe_float(numeric_cols[-2]) if len(numeric_cols) >= 2 else 0.0
+            quantity = _safe_float(numeric_cols[-3]) if len(numeric_cols) >= 3 else 1.0
+            if quantity == 0:
+                quantity = 1.0
+            sku_match = re.search(r"\b[A-Z0-9]{5,}\b", line)
+            return {
+                "description": desc_col.strip(),
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "line_total": total,
+                "sku": sku_match.group(0) if sku_match else "",
+            }
+        except Exception:
+            pass
+
+    # Fallback: positional numbers.
     numbers = NUMBER_RE.findall(line)
     if len(numbers) < 2:
         return {}
@@ -296,11 +386,52 @@ def _parse_item_line(line: str) -> Dict:
     }
 
 
+def _merge_similar_items(items: List[Dict]) -> List[Dict]:
+    """
+    Merge items that share the same description and (optionally) SKU/unit price.
+    This reduces duplicate rows when OCR splits lines or repeats headers.
+    """
+    merged = {}
+    for item in items or []:
+        desc_key = (item.get("description") or "").strip().lower()
+        sku_key = (item.get("sku") or "").strip().lower()
+        try:
+            unit_key = round(float(item.get("unit_price") or 0), 4)
+        except Exception:
+            unit_key = item.get("unit_price") or ""
+        key = (desc_key, sku_key, unit_key)
+        if key not in merged:
+            merged[key] = dict(item)
+            continue
+        existing = merged[key]
+        try:
+            existing["quantity"] = round(float(existing.get("quantity") or 0) + float(item.get("quantity") or 0), 4)
+        except Exception:
+            pass
+        try:
+            existing["line_total"] = round(float(existing.get("line_total") or 0) + float(item.get("line_total") or 0), 2)
+        except Exception:
+            pass
+    return list(merged.values())
+
+
 def _safe_float(val: str) -> float:
     cleaned = val.replace(",", "").replace("$", "")
     if cleaned.startswith("(") and cleaned.endswith(")"):
         cleaned = "-" + cleaned[1:-1]
     return float(cleaned)
+
+
+def _sum_item_totals(items: List[Dict]) -> float:
+    total = 0.0
+    count = 0
+    for item in items or []:
+        try:
+            total += float(item.get("line_total") or 0)
+            count += 1
+        except (TypeError, ValueError):
+            continue
+    return total if count else 0.0
 
 
 def _extract_labeled_amounts(lines: List[str]) -> Dict[str, float]:
@@ -353,6 +484,7 @@ def flatten_for_export(records: List[Dict]) -> List[Dict]:
     for rec in records:
         base = {
             "source_file": rec.get("source_file", ""),
+            "doc_type": rec.get("doc_type", ""),
             "vendor": rec.get("vendor", ""),
             "date": rec.get("date", ""),
             "time": rec.get("time", ""),
@@ -360,13 +492,17 @@ def flatten_for_export(records: List[Dict]) -> List[Dict]:
             "payment_method": rec.get("payment_method", ""),
             "subtotal": rec.get("subtotal", ""),
             "tax": rec.get("tax", ""),
+            "tip": rec.get("tip", ""),
             "total": rec.get("total", ""),
             "category": rec.get("category", ""),
+            "currency": rec.get("currency", ""),
         }
         base.update(rec.get("custom_fields", {}))
         items = rec.get("items") or [{}]
-        for item in items:
+        for idx, item in enumerate(items):
             row = base.copy()
+            if idx > 0:
+                row["invoice_number"] = ""
             row.update(
                 {
                     "item_description": item.get("description", ""),

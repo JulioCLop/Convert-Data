@@ -6,17 +6,26 @@ const processBtn = document.getElementById("processBtn");
 const statusEl = document.getElementById("status");
 const csvLink = document.getElementById("csvLink");
 const xlsxLink = document.getElementById("xlsxLink");
+const previewCsvLink = document.getElementById("previewCsvLink");
 const summaryEl = document.getElementById("summary");
 const itemsTable = document.getElementById("itemsTable");
 const rowsTable = document.getElementById("rowsTable");
 const warningsEl = document.getElementById("warnings");
 const recordSelect = document.getElementById("recordSelect");
 const headerLinesEl = document.getElementById("headerLines");
+const learningNote = document.getElementById("learningNote");
+const previewModal = document.getElementById("previewModal");
+const previewTableEl = document.getElementById("previewTable");
+const previewDownload = document.getElementById("previewDownload");
+const previewClose = document.getElementById("previewClose");
 let API_BASE = resolveApiBase();
 
 let files = [];
 let records = [];
 let rows = [];
+let previewUrl = null;
+let previewOpen = false;
+let learnedCategories = loadLearnedCategories();
 
 function setStatus(text, tone = "info") {
   statusEl.textContent = text;
@@ -79,6 +88,56 @@ function collectCategories() {
   return pairs;
 }
 
+function resolveCategories() {
+  const manual = collectCategories();
+  const autoLearn = document.getElementById("autoLearn")?.checked;
+  if (!autoLearn) return manual;
+  return { ...learnedCategories, ...manual };
+}
+
+function loadLearnedCategories() {
+  try {
+    const raw = localStorage.getItem("learnedCategories");
+    return raw ? JSON.parse(raw) : {};
+  } catch (_e) {
+    return {};
+  }
+}
+
+function saveLearnedCategories(map) {
+  try {
+    localStorage.setItem("learnedCategories", JSON.stringify(map));
+  } catch (_e) {}
+}
+
+function updateLearnedFromRecords(docs) {
+  let changed = false;
+  (docs || []).forEach((doc) => {
+    const vendor = (doc.vendor || "").trim();
+    const category = (doc.category || "").trim();
+    if (vendor && category && !learnedCategories[vendor]) {
+      learnedCategories[vendor] = category;
+      changed = true;
+    }
+  });
+  if (changed) saveLearnedCategories(learnedCategories);
+}
+
+function updateLearningNote() {
+  if (!learningNote) return;
+  const autoLearn = document.getElementById("autoLearn")?.checked;
+  const count = Object.keys(learnedCategories || {}).length;
+  if (!autoLearn) {
+    learningNote.textContent = "Auto-learn categories is off.";
+    return;
+  }
+  if (!count) {
+    learningNote.textContent = "Learning is on. Parsed vendors will be remembered with their categories.";
+    return;
+  }
+  learningNote.textContent = `Learning is on. Applying ${count} learned vendor→category mappings.`;
+}
+
 function toggleDownloads(csvUrl, xlsxUrl) {
   if (csvUrl) {
     csvLink.href = withBase(csvUrl);
@@ -109,13 +168,15 @@ async function processDocuments() {
   processBtn.disabled = true;
   setStatus("Processing…", "info");
   toggleDownloads(null, null);
+  setPreviewCsv([]);
+  updateLearningNote();
 
   const form = new FormData();
   files.forEach((file) => form.append("files", file));
   form.append("forceOcr", document.getElementById("forceOcr").checked);
   form.append("maxPages", document.getElementById("maxPages").value || "5");
   form.append("customFields", JSON.stringify(collectCustomFields()));
-  form.append("categories", JSON.stringify(collectCategories()));
+  form.append("categories", JSON.stringify(resolveCategories()));
 
   try {
     const res = await fetch(withBase("/api/process"), {
@@ -136,6 +197,9 @@ async function processDocuments() {
     renderHeaderLines();
     renderRows(rows);
     renderWarnings(data.warnings || []);
+    setPreviewCsv(rows);
+    updateLearnedFromRecords(records);
+    updateLearningNote();
     toggleDownloads(data.csv_url, data.xlsx_url);
     setStatus("Ready — review preview, then download.", "success");
   } catch (err) {
@@ -228,6 +292,7 @@ function uniqueList(list) {
 
 function deriveRowColumns(rowsData) {
   const baseOrder = [
+    "doc_type",
     "source_file",
     "vendor",
     "category",
@@ -237,13 +302,74 @@ function deriveRowColumns(rowsData) {
     "payment_method",
     "subtotal",
     "tax",
+    "tip",
     "total",
+    "currency",
   ];
   const itemOrder = ["item_description", "item_quantity", "item_unit_price", "item_line_total", "item_sku"];
   const seen = new Set();
   rowsData.forEach((row) => Object.keys(row || {}).forEach((k) => seen.add(k)));
   const custom = Array.from(seen).filter((k) => !baseOrder.includes(k) && !itemOrder.includes(k)).sort();
   return [...baseOrder.filter((k) => seen.has(k)), ...custom, ...itemOrder.filter((k) => seen.has(k))];
+}
+
+function setPreviewCsv(rowsData) {
+  if (!rowsData || !rowsData.length) {
+    previewCsvLink.href = "#";
+    previewCsvLink.setAttribute("aria-disabled", "true");
+    previewCsvLink.removeAttribute("download");
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
+    previewDownload.href = "#";
+    previewDownload.setAttribute("aria-disabled", "true");
+    previewDownload.removeAttribute("download");
+    previewTableEl.innerHTML = `<div class="muted small">No preview available.</div>`;
+    return;
+  }
+  const cols = deriveRowColumns(rowsData);
+  const csv = buildCsvString(rowsData, cols, 50);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = URL.createObjectURL(blob);
+  previewCsvLink.href = previewUrl;
+  previewCsvLink.setAttribute("aria-disabled", "false");
+  previewCsvLink.download = "preview.csv";
+  previewDownload.href = previewUrl;
+  previewDownload.setAttribute("aria-disabled", "false");
+  previewDownload.download = "preview.csv";
+  const limitedRows = rowsData.slice(0, 50);
+  previewTableEl.innerHTML = renderTable(limitedRows, cols);
+}
+
+function buildCsvString(rowsData, cols, limit = rowsData.length) {
+  const header = cols.join(",");
+  const body = rowsData
+    .slice(0, limit)
+    .map((row) => cols.map((key) => csvEscape(row[key])).join(","))
+    .join("\n");
+  return `${header}\n${body}`;
+}
+
+function csvEscape(val) {
+  if (val === null || val === undefined) return "";
+  const str = String(val);
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function openPreviewModal() {
+  if (previewCsvLink.getAttribute("aria-disabled") === "true") return;
+  previewModal.classList.add("is-open");
+  previewModal.setAttribute("aria-hidden", "false");
+  previewOpen = true;
+}
+
+function closePreviewModal() {
+  previewModal.classList.remove("is-open");
+  previewModal.setAttribute("aria-hidden", "true");
+  previewOpen = false;
 }
 
 function renderSummary(docs) {
@@ -402,6 +528,20 @@ recordSelect.addEventListener("change", () => {
   renderItems();
   renderHeaderLines();
 });
+previewCsvLink.addEventListener("click", (e) => {
+  e.preventDefault();
+  openPreviewModal();
+});
+previewClose.addEventListener("click", closePreviewModal);
+previewModal.addEventListener("click", (e) => {
+  if (e.target === previewModal || e.target.classList.contains("modal-backdrop")) {
+    closePreviewModal();
+  }
+});
+const autoLearnToggle = document.getElementById("autoLearn");
+if (autoLearnToggle) {
+  autoLearnToggle.addEventListener("change", updateLearningNote);
+}
 
 // Seed with one blank row each
 addCustomFieldRow("Project", "Q4 Launch");
@@ -434,4 +574,6 @@ renderFileList();
 setStatus(`Ready — API: ${API_BASE || "relative origin"}`, "info");
 recordSelect.disabled = true;
 renderHeaderLines();
+setPreviewCsv([]);
+updateLearningNote();
 pingApi();

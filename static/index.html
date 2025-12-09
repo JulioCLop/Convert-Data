@@ -68,6 +68,10 @@
               <span>Max pages</span>
               <input type="number" id="maxPages" min="1" max="10" value="5" />
             </label>
+            <label class="toggle">
+              <input type="checkbox" id="autoLearn" checked />
+              <span>Auto-learn vendor categories</span>
+            </label>
           </div>
 
           <button class="btn btn-primary btn-icon" id="processBtn" type="button">Run extraction</button>
@@ -85,9 +89,11 @@
         </div>
 
         <div class="downloads">
+          <a href="#" id="previewCsvLink" aria-disabled="true">Preview & Download CSV</a>
           <a href="#" id="csvLink" aria-disabled="true">Download CSV</a>
           <a href="#" id="xlsxLink" aria-disabled="true">Download XLSX</a>
         </div>
+        <div class="small muted" id="learningNote"></div>
 
         <div class="divider"></div>
 
@@ -133,6 +139,26 @@
         </div>
       </section>
     </main>
+
+    <div class="modal" id="previewModal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <div class="modal-card">
+        <div class="modal-header">
+          <div>
+            <div class="badge">Download preview</div>
+            <h3>CSV snapshot (first 50 rows)</h3>
+            <div class="small muted">Review the parsed rows before downloading the full files.</div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" id="previewClose" type="button">Close</button>
+            <a class="btn btn-primary" id="previewDownload" href="#" aria-disabled="true" download="preview.csv">Download CSV</a>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="table-wrap" id="previewTable"></div>
+        </div>
+      </div>
+    </div>
 
     <script src="/static/app.js"></script>
   </body>
