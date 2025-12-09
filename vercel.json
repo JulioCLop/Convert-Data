@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "server.py", "use": "@vercel/python" },
+    { "src": "static/**/*", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/server.py" },
+    { "src": "/download/(.*)", "dest": "/server.py" },
+    { "src": "/static/(.*)", "dest": "/static/$1" },
+    { "src": "/", "dest": "/static/index.html" },
+    { "src": "/(.*)", "dest": "/static/$1" }
+  ],
+  "env": {
+    "OUTPUT_DIR": "/tmp"
+  }
+}

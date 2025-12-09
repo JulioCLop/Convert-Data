@@ -11,6 +11,7 @@ const itemsTable = document.getElementById("itemsTable");
 const rowsTable = document.getElementById("rowsTable");
 const warningsEl = document.getElementById("warnings");
 const recordSelect = document.getElementById("recordSelect");
+const headerLinesEl = document.getElementById("headerLines");
 let API_BASE = resolveApiBase();
 
 let files = [];
@@ -132,6 +133,7 @@ async function processDocuments() {
     renderSummary(records);
     populateRecordSelect(records);
     renderItems();
+    renderHeaderLines();
     renderRows(rows);
     renderWarnings(data.warnings || []);
     toggleDownloads(data.csv_url, data.xlsx_url);
@@ -305,6 +307,21 @@ function renderItems() {
   itemsTable.innerHTML = renderTable(items, cols);
 }
 
+function renderHeaderLines() {
+  if (!records.length) {
+    headerLinesEl.innerHTML = `<div class="muted small">No header section yet.</div>`;
+    return;
+  }
+  const idx = Number(recordSelect.value || 0);
+  const doc = records[idx] || records[0];
+  const lines = doc.header_lines || [];
+  if (!lines.length) {
+    headerLinesEl.innerHTML = `<div class="muted small">No separate header detected.</div>`;
+    return;
+  }
+  headerLinesEl.innerHTML = `<div class="header-block">${lines.map((l) => escapeHtml(l)).join("\n")}</div>`;
+}
+
 function renderRows(dataRows) {
   if (!dataRows.length) {
     rowsTable.innerHTML = `<div class="muted small">No export rows yet.</div>`;
@@ -360,7 +377,10 @@ function escapeHtml(str) {
 
 // Event wiring
 dropzone.addEventListener("click", () => fileInput.click());
-browseBtn.addEventListener("click", () => fileInput.click());
+browseBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  fileInput.click();
+});
 
 dropzone.addEventListener("dragover", (e) => {
   e.preventDefault();
@@ -378,7 +398,10 @@ fileInput.addEventListener("change", (e) => {
 });
 
 processBtn.addEventListener("click", processDocuments);
-recordSelect.addEventListener("change", renderItems);
+recordSelect.addEventListener("change", () => {
+  renderItems();
+  renderHeaderLines();
+});
 
 // Seed with one blank row each
 addCustomFieldRow("Project", "Q4 Launch");
@@ -410,4 +433,5 @@ async function pingApi() {
 renderFileList();
 setStatus(`Ready — API: ${API_BASE || "relative origin"}`, "info");
 recordSelect.disabled = true;
+renderHeaderLines();
 pingApi();

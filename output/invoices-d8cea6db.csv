@@ -1,0 +1,9 @@
+source_file,vendor,date,time,invoice_number,payment_method,subtotal,tax,total,category,Project,item_description,item_quantity,item_unit_price,item_line_total,item_sku
+Invoice INV-000342.pdf,Developer-first billing,"Dec 2, 2025",,INV-000342,,,,,,Q4 Launch,Completed full About Page build-out,12.0,65.0,780.0,
+Invoice INV-000342.pdf,Developer-first billing,"Dec 2, 2025",,INV-000342,,,,,,Q4 Launch,Content creation,3.0,65.0,195.0,
+Invoice INV-000342.pdf,Developer-first billing,"Dec 2, 2025",,INV-000342,,,,,,Q4 Launch,3 $65.00 $,3.0,65.0,195.0,
+Invoice INV-000342.pdf,Developer-first billing,"Dec 2, 2025",,INV-000342,,,,,,Q4 Launch,Home Page build-out,4.0,65.0,260.0,
+Invoice INV-000342.pdf,Developer-first billing,"Dec 2, 2025",,INV-000342,,,,,,Q4 Launch,"modernization to improve performance, readability, and",5.0,65.0,325.0,
+Invoice INV-000342.pdf,Developer-first billing,"Dec 2, 2025",,INV-000342,,,,,,Q4 Launch,1 $300.00 $,1.0,300.0,300.0,
+Invoice INV-000342.pdf,Developer-first billing,"Dec 2, 2025",,INV-000342,,,,,,Q4 Launch,Give page Build-out,8.0,65.0,520.0,
+Invoice INV-000342.pdf,Developer-first billing,"Dec 2, 2025",,INV-000342,,,,,,Q4 Launch,"$2,575.00 $0.00 $2,",0.0,2575.0,0.0,
